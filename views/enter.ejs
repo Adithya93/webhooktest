@@ -1,0 +1,36 @@
+<html>
+	<head>
+		<title>Talk to Our Bot!</title>
+	</head>
+	<body>
+		<p>Why don't you have a chat with our favorite bot? :)</p>
+		<div class="fb-send-to-messenger" 
+		  messenger_app_id= <%= appId %>  
+		  page_id= <%= pageId %> 
+		  data-ref= <%= dataRef %> 
+		  color="blue" 
+		  size="standard">
+		</div>
+		<script>
+			
+		    window.fbAsyncInit = function() {
+		      console.log("Initializing FB!");
+		      FB.init({
+		        appId: <%= appId %>,
+		        xfbml: true,
+		        version: "v2.6"
+		      });
+
+		    };
+		    (function(d, s, id){
+		       var js, fjs = d.getElementsByTagName(s)[0];
+		       if (d.getElementById(id)) { return; }
+		       js = d.createElement(s); js.id = id;
+		       js.src = "//connect.facebook.net/en_US/sdk.js";
+		       fjs.parentNode.insertBefore(js, fjs);
+		       console.log("Added script!");
+		    }(document, 'script', 'facebook-jssdk'));
+  		</script>
+
+	</body>
+</html>

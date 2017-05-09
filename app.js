@@ -51,6 +51,10 @@ const SERVER_URL = (process.env.SERVER_URL) ?
   (process.env.SERVER_URL) :
   config.get('serverURL');
 
+const APP_ID = (process.env.APP_ID) ? 
+  (process.env.APP_ID) :
+  config.get('appID');  
+
 console.log("APP_SECRET: " + APP_SECRET);
 console.log("VALIDATION_TOKEN: " + VALIDATION_TOKEN);
 console.log("PAGE_ACCESS_TOKEN: " + PAGE_ACCESS_TOKEN);
@@ -60,6 +64,17 @@ if (!(APP_SECRET && VALIDATION_TOKEN && PAGE_ACCESS_TOKEN && SERVER_URL)) {
   console.error("Missing config values");
   process.exit(1);
 }
+
+// Test web-plugin entry for Messenger Bot
+app.get('/enter', function(req, res) {
+  console.log("Rendering entry-point page");
+  res.render('enter', {
+   appId : APP_ID,
+   pageId : PAGE_ACCESS_TOKEN,
+   dataRef : "ABC123"// Use crypto module to generate some random hash?
+  });
+});
+
 
 /*
  * Use your own validation token. Check that the token used in the Webhook 
@@ -146,6 +161,9 @@ app.get('/authorize', function(req, res) {
     redirectURISuccess: redirectURISuccess
   });
 });
+
+
+
 
 /*
  * Verify that the callback came from Facebook. Using the App Secret from 
