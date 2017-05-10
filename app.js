@@ -55,6 +55,10 @@ const APP_ID = (process.env.APP_ID) ?
   (process.env.APP_ID) :
   config.get('appID');  
 
+const PAGE_ID = (process.env.PAGE_ID) ?
+  (process.env.PAGE_ID) :
+  config.get('pageID');
+
 console.log("APP_SECRET: " + APP_SECRET);
 console.log("VALIDATION_TOKEN: " + VALIDATION_TOKEN);
 console.log("PAGE_ACCESS_TOKEN: " + PAGE_ACCESS_TOKEN);
@@ -70,7 +74,8 @@ app.get('/enter', function(req, res) {
   console.log("Rendering entry-point page");
   res.render('enter', {
    appId : APP_ID,
-   pageId : PAGE_ACCESS_TOKEN,
+   //pageId : PAGE_ACCESS_TOKEN,
+   pageId : PAGE_ID,
    dataRef : "ABC123"// Use crypto module to generate some random hash?
   });
 });
@@ -221,7 +226,10 @@ function receivedAuthentication(event) {
 
   // When an authentication is received, we'll send a message back to the sender
   // to let them know it was successful.
-  sendTextMessage(senderID, "Authentication successful");
+  //sendTextMessage(senderID, "Authentication successful");
+  console.log("Recipient ID is " + recipientID);
+  sendTextMessage(senderID, "Hello friend!");
+  // Extract username from recipient ID for custom greeting
 }
 
 /*
