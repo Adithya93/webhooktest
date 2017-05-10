@@ -4,7 +4,7 @@
 	</head>
 	<body>
 		<p>Why don't you have a chat with our favorite bot? :)</p>
-		<div class="fb-send-to-messenger" 
+		<div class="fb-messengermessageus" 
 		  messenger_app_id= <%= appId %>  
 		  page_id= <%= pageId %> 
 		  data-ref= <%= dataRef %> 
@@ -24,6 +24,7 @@
 		      FB.Event.subscribe('send_to_messenger', function(e) {
     			// callback for events triggered by the plugin
     			console.log("Send to mesenger event triggered!");
+		  	  	console.log("Event info: " + JSON.stringify(e));
 		  	  });
 
 
