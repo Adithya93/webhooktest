@@ -347,7 +347,7 @@ function receivedMessage(event) {
       default:
         //sendTextMessage(senderID, messageText);
         // parse the zipcode and country code, then fetch corresponding json
-        resultJSON = fetchWeatherInfo(messageText); // Parses zipcode and country code, then tries to fetch corresponding info
+        var resultJSON = fetchWeatherInfo(messageText); // Parses zipcode and country code, then tries to fetch corresponding info
         sendWeatherInfo(senderID, resultJSON);
     
     }
