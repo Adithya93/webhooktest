@@ -347,8 +347,10 @@ function receivedMessage(event) {
       default:
         //sendTextMessage(senderID, messageText);
         // parse the zipcode and country code, then fetch corresponding json
-        var resultJSON = fetchWeatherInfo(messageText); // Parses zipcode and country code, then tries to fetch corresponding info
-        sendWeatherInfo(senderID, resultJSON);
+        fetchWeatherInfo(messageText, function(resultJSON) {
+          sendWeatherInfo(senderID, resultJSON);
+        }); // Parses zipcode and country code, then tries to fetch corresponding info
+        //sendWeatherInfo(senderID, resultJSON);
     
     }
   } else if (messageAttachments) {
@@ -884,19 +886,21 @@ function callSendAPI(messageData) {
   });  
 }
 
-function fetchWeatherInfo(inputText) {
+function fetchWeatherInfo(inputText, next) {
   var num_regexp = /[0-9]+/;
   var letter_regexp = /[a-z]+/;
   var zipcode = inputText.match(num_regexp);
   if (zipcode.length == 0) {
     console.log("Missing zipcode, not going to fetch");
-    return null;
+    //return null;
+    next(null);
   }
   var zip = zipcode[0];
   var countrycode = inputText.match(letter_regexp);
   if (countrycode.length == 0) {
     console.log("Missing countrycode, not going to fetch");
-    return null;
+    //return null;
+    next(null);
   }
   var country = countrycode[0];
   var queryPrefix = "http://samples.openweathermap.org/data/2.5/weather?";
@@ -908,10 +912,12 @@ function fetchWeatherInfo(inputText) {
     return res.json();
   }).then(function(json) {
     console.log("Obtained the following info:\n" + JSON.stringify(json));
-    return json;
+    next(json);
+    //return json;
   }).catch(function(err) {
     console.log("Error making weather query! " + err);
-    return null;
+    //return null;
+    next(null);
   });
 
   /*
