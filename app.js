@@ -893,14 +893,14 @@ function fetchWeatherInfo(inputText, next) {
   if (!zipcode || zipcode.length == 0) {
     console.log("Missing zipcode, not going to fetch");
     //return null;
-    next(null);
+    return next(null);
   }
   var zip = zipcode[0];
   var countrycode = inputText.match(letter_regexp);
   if (!countrycode || countrycode.length == 0) {
     console.log("Missing countrycode, not going to fetch");
     //return null;
-    next(null);
+    return next(null);
   }
   var country = countrycode[0];
   var queryPrefix = "http://samples.openweathermap.org/data/2.5/weather?";
@@ -917,7 +917,7 @@ function fetchWeatherInfo(inputText, next) {
   }).catch(function(err) {
     console.log("Error making weather query! " + err);
     //return null;
-    next(null);
+    return next(null);
   });
 
   /*
