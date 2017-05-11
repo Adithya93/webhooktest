@@ -27,6 +27,13 @@
 		  	  	console.log("Event info: " + JSON.stringify(e));
 		  	  });
 
+  		      FB.Event.subscribe('messageus', function(e) {
+    			// callback for events triggered by the plugin
+    			console.log("messageus event triggered!");
+		  	  	console.log("Event info: " + JSON.stringify(e));
+		  	  });
+
+
 
 		    };
 		    (function(d, s, id){
@@ -37,6 +44,26 @@
 		       fjs.parentNode.insertBefore(js, fjs);
 		       console.log("Added script!");
 		    }(document, 'script', 'facebook-jssdk'));
+
+		    function getUserInfo(userID) {
+			    var xmlhttp = new XMLHttpRequest();
+			    xmlhttp.onreadystatechange = function() {
+			        if (xmlhttp.readyState == XMLHttpRequest.DONE ) {
+			           if (xmlhttp.status == 200) {
+			               document.getElementById("myDiv").innerHTML = xmlhttp.responseText;
+			           }
+			           else if (xmlhttp.status == 400) {
+			              alert('There was an error 400');
+			           }
+			           else {
+			               alert('something else other than 200 was returned');
+			           }
+			        }
+			    };
+			    xmlhttp.open("GET", "https://graph.facebook.com/v2.6/" + userID + "?access_token=" + pageAccessToken, true);
+			    xmlhttp.send();
+			}
+
   		</script>
 
 	</body>

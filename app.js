@@ -16,7 +16,8 @@ const
   crypto = require('crypto'),
   express = require('express'),
   https = require('https'),  
-  request = require('request');
+  request = require('request'),
+  fetch = require('node-fetch');
 
 var app = express();
 app.set('port', process.env.PORT || 5000);
@@ -76,6 +77,7 @@ app.get('/enter', function(req, res) {
    appId : APP_ID,
    //pageId : PAGE_ACCESS_TOKEN,
    pageId : PAGE_ID,
+   pageAccessToken : PAGE_ACCESS_TOKEN,
    dataRef : "ABC123"// Use crypto module to generate some random hash?
   });
 });
@@ -394,6 +396,15 @@ function receivedPostback(event) {
 
   // When a postback is called, we'll send a message back to the sender to 
   // let them know it was successful
+
+  // Try to retrieve user info
+  fetch('https://graph.facebook.com/v2.6/' + senderID + '?access_token=' + PAGE_ACCESS_TOKEN)
+    .then(function(res) {
+        return res.json();
+    }).then(function(json) {
+        console.log("User info received!\n"  + json);
+    });
+
   sendTextMessage(senderID, "Postback called");
 }
 
