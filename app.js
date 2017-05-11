@@ -890,14 +890,14 @@ function fetchWeatherInfo(inputText, next) {
   var num_regexp = /[0-9]+/;
   var letter_regexp = /[a-z]+/;
   var zipcode = inputText.match(num_regexp);
-  if (zipcode.length == 0) {
+  if (!zipcode || zipcode.length == 0) {
     console.log("Missing zipcode, not going to fetch");
     //return null;
     next(null);
   }
   var zip = zipcode[0];
   var countrycode = inputText.match(letter_regexp);
-  if (countrycode.length == 0) {
+  if (!countrycode || countrycode.length == 0) {
     console.log("Missing countrycode, not going to fetch");
     //return null;
     next(null);
