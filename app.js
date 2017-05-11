@@ -402,7 +402,7 @@ function receivedPostback(event) {
     .then(function(res) {
         return res.json();
     }).then(function(json) {
-        console.log("User info received!\n"  + json);
+        console.log("User info received!\n"  + JSON.stringify(json));
     });
 
   sendTextMessage(senderID, "Postback called");
