@@ -397,15 +397,21 @@ function receivedPostback(event) {
   // When a postback is called, we'll send a message back to the sender to 
   // let them know it was successful
 
+  var userName = "friend";
   // Try to retrieve user info
   fetch('https://graph.facebook.com/v2.6/' + senderID + '?access_token=' + PAGE_ACCESS_TOKEN)
     .then(function(res) {
         return res.json();
     }).then(function(json) {
         console.log("User info received!\n"  + JSON.stringify(json));
+        userName = json["first_name"] || userName;
+        sendTextMessage(senderID, "Welcome " + userName + "!");
+    }).catch(function(err) { // in case there were network errors
+      console.log("Error fetching user profile!\n" + err);
+      sendTextMessage(senderID, "Welcome " + userName + "!"); // TEMP - Replace with initial greeting or sequence from Wit.ai
     });
 
-  sendTextMessage(senderID, "Postback called");
+  //sendTextMessage(senderID, "Postback called");
 }
 
 /*
