@@ -60,6 +60,10 @@ const PAGE_ID = (process.env.PAGE_ID) ?
   (process.env.PAGE_ID) :
   config.get('pageID');
 
+const WEATHER_APP_ID = (process.env.WEATHER_APP_ID) ?
+  (process.env.WEATHER_APP_ID) :
+  config.get('weatherAppID');
+
 console.log("APP_SECRET: " + APP_SECRET);
 console.log("VALIDATION_TOKEN: " + VALIDATION_TOKEN);
 console.log("PAGE_ACCESS_TOKEN: " + PAGE_ACCESS_TOKEN);
@@ -341,7 +345,11 @@ function receivedMessage(event) {
         break;
 
       default:
-        sendTextMessage(senderID, messageText);
+        //sendTextMessage(senderID, messageText);
+        // parse the zipcode and country code, then fetch corresponding json
+        resultJSON = fetchWeatherInfo(messageText); // Parses zipcode and country code, then tries to fetch corresponding info
+        sendWeatherInfo(senderID, resultJSON);
+    
     }
   } else if (messageAttachments) {
     sendTextMessage(senderID, "Message with attachment received");
@@ -398,6 +406,7 @@ function receivedPostback(event) {
   // let them know it was successful
 
   var userName = "friend";
+  var firstQn = "Please enter the zipcode and country code for the place whose weather you want to know!";
   // Try to retrieve user info
   fetch('https://graph.facebook.com/v2.6/' + senderID + '?access_token=' + PAGE_ACCESS_TOKEN)
     .then(function(res) {
@@ -405,10 +414,10 @@ function receivedPostback(event) {
     }).then(function(json) {
         console.log("User info received!\n"  + JSON.stringify(json));
         userName = json["first_name"] || userName;
-        sendTextMessage(senderID, "Welcome " + userName + "!");
+        sendTextMessage(senderID, "Welcome " + userName + "! " + firstQn);
     }).catch(function(err) { // in case there were network errors
       console.log("Error fetching user profile!\n" + err);
-      sendTextMessage(senderID, "Welcome " + userName + "!"); // TEMP - Replace with initial greeting or sequence from Wit.ai
+      sendTextMessage(senderID, "Welcome " + userName + "! " + firstQn); // TEMP - Replace with initial greeting or sequence from Wit.ai
     });
 
   //sendTextMessage(senderID, "Postback called");
@@ -873,6 +882,56 @@ function callSendAPI(messageData) {
       console.error("Failed calling Send API", response.statusCode, response.statusMessage, body.error);
     }
   });  
+}
+
+function fetchWeatherInfo(inputText) {
+  var num_regexp = /[0-9]+/;
+  var letter_regexp = /[a-z]+/;
+  var zipcode = inputText.match(num_regexp);
+  if (zipcode.length == 0) {
+    console.log("Missing zipcode, not going to fetch");
+    return null;
+  }
+  var zip = zipcode[0];
+  var countrycode = inputText.match(letter_regexp);
+  if (countrycode.length == 0) {
+    console.log("Missing countrycode, not going to fetch");
+    return null;
+  }
+  var country = countrycode[0];
+  var queryPrefix = "http://samples.openweathermap.org/data/2.5/weather?";
+  var querySuffix = "&appid=" + WEATHER_APP_ID;
+  var queryStr = queryPrefix + "zip=" + zip + "," + country + querySuffix;
+  console.log("About to make query " + queryStr);
+  fetch(queryStr)
+  .then(function(res) {
+    return res.json();
+  }).then(function(json) {
+    console.log("Obtained the following info:\n" + JSON.stringify(json));
+    return json;
+  }).catch(function(err) {
+    console.log("Error making weather query! " + err);
+    return null;
+  });
+
+  /*
+    fetch('https://graph.facebook.com/v2.6/' + senderID + '?access_token=' + PAGE_ACCESS_TOKEN)
+    .then(function(res) {
+        return res.json();
+    }).then(function(json) {
+  */
+
+}
+
+function sendWeatherInfo(senderID, info) {
+  var errorMsg = "Sorry, I got nothing for that zipcode/countrycode combo. Check if it's valid?";
+  if (!info  || !info['weather'] || !info['weather'] || !info['weather'].length) {
+    sendTextMessage(senderID, errorMsg);
+    return;
+  }
+  var chosenInfo = info['weather'][0]['description'] || errorMsg;
+  console.log("Info to send user: " + chosenInfo);
+  sendTextMessage(senderID, chosenInfo);
 }
 
 // Start server
