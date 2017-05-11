@@ -925,7 +925,8 @@ function fetchWeatherInfo(inputText) {
 
 function sendWeatherInfo(senderID, info) {
   var errorMsg = "Sorry, I got nothing for that zipcode/countrycode combo. Check if it's valid?";
-  if (!info  || !info['weather'] || !info['weather'] || !info['weather'].length) {
+  if (!info || !info['weather'] || info['weather'].length == 0) {
+    console.log("Missing info!");
     sendTextMessage(senderID, errorMsg);
     return;
   }
