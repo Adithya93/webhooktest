@@ -64,6 +64,8 @@ const WEATHER_APP_ID = (process.env.WEATHER_APP_ID) ?
   (process.env.WEATHER_APP_ID) :
   config.get('weatherAppID');
 
+const LOCATIONS_BACKLOG_LIMIT = 3;
+
 console.log("APP_SECRET: " + APP_SECRET);
 console.log("VALIDATION_TOKEN: " + VALIDATION_TOKEN);
 console.log("PAGE_ACCESS_TOKEN: " + PAGE_ACCESS_TOKEN);
@@ -73,6 +75,13 @@ if (!(APP_SECRET && VALIDATION_TOKEN && PAGE_ACCESS_TOKEN && SERVER_URL)) {
   console.error("Missing config values");
   process.exit(1);
 }
+
+var DEFAULT_USERNAME = "friend";
+
+var idCache = {};
+var infoCache = {}; // map of city name to info
+var locationsCache = {}; // map of id to most recent 3 locations requested
+var hasPendingMsgs = {};
 
 // Test web-plugin entry for Messenger Bot
 app.get('/enter', function(req, res) {
@@ -86,6 +95,13 @@ app.get('/enter', function(req, res) {
   });
 });
 
+
+/*
+app.get('/', function(req, res) {
+  console.log("Redirecting to enter page!");
+  res.redirect('/enter');
+});
+*/
 
 /*
  * Use your own validation token. Check that the token used in the Webhook 
@@ -282,7 +298,8 @@ function receivedMessage(event) {
     console.log("Quick reply for message %s with payload %s",
       messageId, quickReplyPayload);
 
-    sendTextMessage(senderID, "Quick reply tapped");
+    //sendTextMessage(senderID, "Quick reply tapped");
+    handleQuickReply(senderID, quickReplyPayload);
     return;
   }
 
@@ -356,6 +373,7 @@ function receivedMessage(event) {
   } else if (messageAttachments) {
     sendTextMessage(senderID, "Message with attachment received");
   }
+  console.log("Done handling received message!");
 }
 
 
@@ -382,6 +400,8 @@ function receivedDeliveryConfirmation(event) {
   }
 
   console.log("All message before %d were delivered.", watermark);
+
+  sendPendingMsg(senderID);
 }
 
 
@@ -407,20 +427,51 @@ function receivedPostback(event) {
   // When a postback is called, we'll send a message back to the sender to 
   // let them know it was successful
 
-  var userName = "friend";
-  var firstQn = "Please enter the zipcode and country code for the place whose weather you want to know!";
-  // Try to retrieve user info
-  fetch('https://graph.facebook.com/v2.6/' + senderID + '?access_token=' + PAGE_ACCESS_TOKEN)
-    .then(function(res) {
-        return res.json();
-    }).then(function(json) {
-        console.log("User info received!\n"  + JSON.stringify(json));
-        userName = json["first_name"] || userName;
-        sendTextMessage(senderID, "Welcome " + userName + "! " + firstQn);
-    }).catch(function(err) { // in case there were network errors
-      console.log("Error fetching user profile!\n" + err);
-      sendTextMessage(senderID, "Welcome " + userName + "! " + firstQn); // TEMP - Replace with initial greeting or sequence from Wit.ai
-    });
+  var userName = DEFAULT_USERNAME;
+  
+
+  //var firstQn = "Please enter the city and country code for the place whose weather you want to know! For instance, 'menlo park, us'";
+
+  if (!lookup(senderID)) { // First postback from this user, must be entry of user to app
+
+  
+    // Try to retrieve user info
+    fetch('https://graph.facebook.com/v2.6/' + senderID + '?access_token=' + PAGE_ACCESS_TOKEN)
+      .then(function(res) {
+          return res.json();
+      }).then(function(json) {
+          console.log("User info received!\n"  + JSON.stringify(json));
+          userName = json["first_name"] || userName;
+          //sendTextMessage(senderID, "Welcome " + userName + "! " + firstQn);
+          // Start by asking quick reply qn of whether you want to check out weather
+          sendInitialQuickReply(senderID, userName);
+          cache(senderID, userName);
+      }).catch(function(err) { // in case there were network errors
+        console.log("Error fetching user profile!\n" + err);
+        sendTextMessage(senderID, "Welcome " + userName + "! " + firstQn); // TEMP - Replace with initial greeting or sequence from Wit.ai
+      });
+  }
+
+  else {
+    console.log("Postback received from existing user!");
+    // Send buttons with past location info
+    var favLocs = getCachedLocations(senderID);
+    if (favLocs) { // send generic message with a button for every location
+      var buttons = favLocs.map(function(loc) {
+        return {
+          type: "postback",
+          title: loc,
+          payload: loc,
+        };
+      });
+    var elements = [{title: "Wanna check out the weather of one of your favorite locations?", buttons: buttons}];
+    sendMessageWithGenericPayload(senderID, elements);
+    }
+    else {
+      console.log("No locations found for this user! Trying to send inital question.");
+      sendInitialQuickReply(senderID, lookup(senderID));
+    }
+  }
 
   //sendTextMessage(senderID, "Postback called");
 }
@@ -886,6 +937,182 @@ function callSendAPI(messageData) {
   });  
 }
 
+function sendMessageWithGenericPayload(recipientId, elements) {
+   var messageData = {
+    recipient: {
+      id: recipientId
+    },
+    message: {
+      attachment: {
+        type: "template",
+        payload: {
+          template_type: "generic",
+          elements: elements
+        }
+      }
+    }
+  };  
+ callSendAPI(messageData);
+}
+
+
+function sendMessageWithImage(recipientId, imageURL) {
+  var messageData = {
+    recipient: {
+      id: recipientId
+    },
+    message: {
+      attachment: {
+        type: "image",
+        payload: {
+          url: SERVER_URL + imageURL
+        }
+      }
+    }
+  };
+
+  callSendAPI(messageData);
+}
+
+/*
+ * Send a text message with a button using the Send API.
+ *
+ */
+function sendMessageWithButton(recipientId, buttonInfo) {
+  var messageData = {
+    recipient: {
+      id: recipientId
+    },
+    message: {
+      //text: messageText,
+      metadata: "DEVELOPER_DEFINED_METADATA",
+      attachment: {
+        type: "template",
+        payload: {
+          template_type: "button",
+          text: "This is a nice picture!",
+          buttons: buttonInfo
+        }
+    }
+
+  },
+    //buttons: buttonInfo
+};
+  callSendAPI(messageData);
+}
+
+
+function sendInitialQuickReply(senderID, userName) {
+  var qn = "Hello there " + userName + "! Would you like to check out today's weather for some location?";
+  var quickReplies = [{content_type: "text", title: "Yes, please!", payload: "Start Weather"}, {content_type: "text", title: "No, thanks!", payload: "No Weather"}];
+  sendMessageWithQuickReply(senderID, qn, quickReplies);
+}
+
+function sendMessageWithQuickReply(recipientId, qn, quickReplies) {
+  var messageData = {
+    recipient: {
+      id: recipientId
+    },
+    message: {
+      text: qn,
+      quick_replies: quickReplies
+    }
+  };
+
+  callSendAPI(messageData);
+}
+
+function sendFollowUpQuickReply(senderID) {
+  var qn = "Would you like to check out the weather forecast for another location?";
+  var quickReplies = [{content_type: "text", title: "Yes!", payload: "Yes"}, {content_type: "text", title: "No, thank you", payload: "No"}];
+  sendMessageWithQuickReply(senderID, qn, quickReplies);
+}
+
+
+function handleQuickReply(senderID, quickReplyPayload) {
+  if (quickReplyPayload === "Yes") { // User wants to ask about another location's weather
+    console.log("User replied yes to quick reply, about to prompt for another location");
+    var nextWeatherPrompt = "Ask away!";
+    sendTextMessage(senderID, nextWeatherPrompt);
+  }
+  else if (quickReplyPayload == "No") { // User not interested in weather anymore, either exit or make small talk
+    console.log("User replied no to quick reply, about to send quick reply for next action");
+    var nextActionPrompt = "What would you like to do next?";
+    var quickReplies = [{content_type: "text", title: "Chit-chat :)", payload: "chat"}, {content_type: "text", title: "Bid Farewell", payload: "exit"}];
+    sendMessageWithQuickReply(senderID, nextActionPrompt, quickReplies);
+  }
+  else if (quickReplyPayload === "chat") { // user wants to make small talk
+    console.log("User wants to chat... Wit.ai time!!!");
+    //sendTextMessage(senderID, "hang on....");
+    // TO-DO: Wit.ai stuff
+    /*
+    var testButtons = [{"type":"web_url",
+        "url":"https://images.pexels.com/photos/104827/cat-pet-animal-domestic-104827.jpeg?w=940&h=650&auto=compress&cs=tinysrgb",
+        "title":"A Cute Kitten",
+        "webview_height_ratio": "compact"}];
+    */
+    //sendMessageWithButton(senderID, testButtons);
+    //sendMessageWithImage(senderID, "/assets/kitten.png");
+    var elements = [{
+            title: "The OFFICIAL source of weather info",
+            subtitle: "Don't trust a bot? Get it from the horse's mouth ;)",
+            item_url: "https://weather.com/",               
+            image_url: SERVER_URL + "/assets/weather.png",
+            buttons: [{
+              type: "web_url",
+              url: "https://weather.com/",
+              title: "Open Web URL"
+            }, {
+              type: "postback",
+              title: "I like this!",
+              payload: "like_weather",
+            }], 
+          },
+          {
+            title: "Random Cat pic :D",
+            subtitle: "Bored of weather? Check out some cute cat pics :P",
+            item_url: "https://www.buzzfeed.com/expresident/best-cat-pictures?utm_term=.vhMOaNJX6b#.ivvE3r6NAZ",               
+            image_url: SERVER_URL + "/assets/kitten.png",
+            buttons: [{
+              type: "web_url",
+              url: "https://www.buzzfeed.com/expresident/best-cat-pictures?utm_term=.vhMOaNJX6b#.ivvE3r6NAZ",
+              title: "Open Web URL"
+            }, {
+              type: "postback",
+              title: "This is awesome!",
+              payload: "like_cat",
+            }], 
+          }];
+    sendMessageWithGenericPayload(senderID, elements);
+  }
+  else if (quickReplyPayload === "Start Weather") { // send initial weather prompt
+    var firstQn = "Please enter the city and country code for the place whose weather you want to know! For instance, 'menlo park, us'";
+    sendTextMessage(senderID, firstQn);
+  }
+  else if (quickReplyPayload === "No Weather") { // handle same way as "No" above (TO-DO : Refactor into function)
+    var nextActionPrompt = "What would you like to do then?";
+    var quickReplies = [{content_type: "text", title: "Chit-chat :)", payload: "chat"}, {content_type: "text", title: "Bid Farewell", payload: "exit"}];
+    sendMessageWithQuickReply(senderID, nextActionPrompt, quickReplies);
+  }
+  else { // user wants to exit.... say goodbye and provide logout link?
+    console.log("User wants to exit... phew!");
+    var userName = lookup(senderID) || DEFAULT_USERNAME;
+    sendTextMessage(senderID, "Adios " + userName + "!");
+    // TO-DO : Display Log-Out link
+  }
+}
+
+// If there is a quick-reply waiting to be sent, send it; else nothing
+function sendPendingMsg(senderID) {
+  if (!hasPendingMsgs[senderID]) {
+    console.log("No pending quick-replies for user " + senderID);
+    return;
+  }
+  console.log("User " + senderID + " has pending quick reply!");
+  sendFollowUpQuickReply(senderID);
+  hasPendingMsgs[senderID] = false;
+}
+/*
 function fetchWeatherInfo(inputText, next) {
   var num_regexp = /[0-9]+/;
   var letter_regexp = /[a-z]+/;
@@ -919,16 +1146,56 @@ function fetchWeatherInfo(inputText, next) {
     //return null;
     return next(null);
   });
+}
+*/
+function fetchWeatherInfo(inputText, next) {
+  var splitRegExp = /,( )*/;
+  var components = inputText.split(splitRegExp);
+  const EXPECTED_COMPONENTS = 3;
+  if (components.length != EXPECTED_COMPONENTS) {
+    console.log("Badly formatted input");
+    return next(null);
+  }
+  var city = components[0];
+  var country = components[2];
 
-  /*
-    fetch('https://graph.facebook.com/v2.6/' + senderID + '?access_token=' + PAGE_ACCESS_TOKEN)
-    .then(function(res) {
-        return res.json();
-    }).then(function(json) {
-  */
-
+  // Fetch from cache if possible
+  var cacheRes;
+  if ((cacheRes = getCachedInfo(city, country))) {
+    console.log("Cache hit on " + city + ", " + country + "!");
+    return next(cacheRes);
+  }
+  console.log("Cache miss on " + city + ", " + country);
+  var query = 'https://query.yahooapis.com/v1/public/yql?q=select%20*%20from%20weather.forecast%20where%20woeid%20in%20(select%20woeid%20from%20geo.places(1)%20where%20text%3D%22' + encodeURI(city + ", " + country) + '%22)&format=json&env=store%3A%2F%2Fdatatables.org%2Falltableswithkeys';
+  console.log("queryString is " + query);
+  fetch(query)//, {method: 'GET', body: String})
+    .then(
+      response => {
+        if (!response.ok) {
+          console.log("Non-success status code while fetching!"); 
+          throw new Error("Error status code from API");
+        }
+      return response.json();
+    })
+    .then(data => {
+      console.log(`JSON data: ${JSON.stringify(data)}`)
+      let low = data["query"]["results"]["channel"]["item"]["forecast"][0]["low"];
+      let high = data["query"]["results"]["channel"]["item"]["forecast"][0]["high"];
+      let text = data["query"]["results"]["channel"]["item"]["forecast"][0]["text"];
+      let city = data["query"]["results"]["channel"]["location"]["city"];
+      console.log(`Extracted low of ${low}, high of ${high}, text of ${text} for ${city}`);
+      //this._update(true, {low, high, text, city});
+      return next({low:low, high:high, text:text, city:city, country:country});
+    })
+    .catch(e => {
+      console.log(`Error fetching! ${e}`);
+      return next(null);
+      //this._update(false);
+    });
+    console.log("Awaiting fetch");
 }
 
+/*
 function sendWeatherInfo(senderID, info) {
   var errorMsg = "Sorry, I got nothing for that zipcode/countrycode combo. Check if it's valid?";
   if (!info || !info['weather'] || info['weather'].length == 0) {
@@ -939,6 +1206,67 @@ function sendWeatherInfo(senderID, info) {
   var chosenInfo = info['weather'][0]['description'] || errorMsg;
   console.log("Info to send user: " + chosenInfo);
   sendTextMessage(senderID, chosenInfo);
+}
+*/
+function sendWeatherInfo(senderID, info) {
+  var errorMsg = "Sorry, I got nothing for that city/country combo. Check if it's valid?";
+  if (!info) {
+    console.log("Missing info!");
+    sendTextMessage(senderID, errorMsg);
+    return;
+  }
+  var infoMsg = info['city'] + " will experience " + info['text'] + " weather with a low of " + info['low'] + "F and a high of " + info['high'] + "F";
+  //sendTextMessage(senderID, infoMsg);
+  // TEMP
+  sendTextMessage(senderID, infoMsg);
+  /*
+  var testButtons = [{"type":"web_url",
+        "url":"https://images.pexels.com/photos/104827/cat-pet-animal-domestic-104827.jpeg?w=940&h=650&auto=compress&cs=tinysrgb",
+        "title":"A Cute Kitten",
+        "webview_height_ratio": "compact"}];
+  sendMessageWithButton(senderID, testButtons);
+  */
+  // Mark user as having pending quick-reply
+  hasPendingMsgs[senderID] = true;
+  // Put in infoCache
+  cacheInfo(info);
+  // Put in locationsCache
+  cacheLocations(senderID, info);
+}
+
+function cache(senderID, userName) {
+  idCache[senderID] = userName;
+}
+
+function lookup(senderID) {
+  return idCache[senderID];
+}
+
+// Need to clear cache at end of day
+function cacheInfo(info) {
+  infoCache[(info['city'] + ', ' + info['country']).toLowerCase()] = info;
+  console.log("Added " + (info['city'] + ', ' + info['country']).toLowerCase() + " to cache with info of " + JSON.stringify(info));
+  // TO-DO : Reset age of info
+}
+
+function getCachedInfo(city, country) {
+  return infoCache[(city + ', ' + country).toLowerCase()];
+}
+
+function cacheLocations(senderID, info) {
+  var currentLocs = locationsCache[senderID] || [];
+  //var currentInfo = infoCache[]
+  if (currentLocs.indexOf(info['city'] + ', ' + info['country']) == -1) { // location not there
+    if (currentLocs.length >= LOCATIONS_BACKLOG_LIMIT) {
+      currentLocs.shift();
+    }
+    currentLocs.push(info['city'] + ', ' + info['country']);
+  }
+  locationsCache[senderID] = currentLocs;
+}
+
+function getCachedLocations(senderID) {
+  return locationsCache[senderID];
 }
 
 // Start server
